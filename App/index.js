@@ -1,127 +1,64 @@
 // Filename: index.js
-// Combined code from all files
-
-import React, { useState, useEffect } from 'react';
-import { SafeAreaView, StyleSheet, View, Button, Alert } from 'react-native';
-
-// Snake Component
-const Snake = ({ snake }) => {
-  return (
-    <View>
-      {snake.map((segment, index) => (
-        <View key={index} style={[styles.snake, { top: segment.y * 20, left: segment.x * 20 }]} />
-      ))}
-    </View>
-  );
-};
-
-// Food Component
-const Food = ({ position }) => {
-  return <View style={[styles.food, { top: position.y * 20, left: position.x * 20 }]} />;
-};
-
-const BOARD_SIZE = 10;
-const INITIAL_SNAKE = [{ x: 0, y: 2 }, { x: 0, y: 1 }, { x: 0, y: 0 }];
-
-const getRandomPosition = () => ({
-  x: Math.floor(Math.random() * BOARD_SIZE),
-  y: Math.floor(Math.random() * BOARD_SIZE),
-});
+import React, { useRef, useEffect } from 'react';
+import { GLView } from 'expo-gl';
+import { Renderer, TextureLoader } from 'expo-three';
+import { PerspectiveCamera, Scene, BoxGeometry, MeshBasicMaterial, Mesh } from 'three';
+import { View, Button, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
 
 export default function App() {
-  const [snake, setSnake] = useState(INITIAL_SNAKE);
-  const [food, setFood] = useState(getRandomPosition());
-  const [direction, setDirection] = useState('RIGHT');
-  const [gameOver, setGameOver] = useState(false);
+  const cameraRef = useRef();
+  let cube;
 
-  useEffect(() => {
-    if (gameOver) return;
+  const onContextCreate = async (gl) => {
+    const { drawingBufferWidth: width, drawingBufferHeight: height } = gl;
 
-    const moveSnake = () => {
-      const snakeHead = { ...snake[0] };
+    // Create a WebGLRenderer without a DOM element
+    const renderer = new Renderer({ gl });
+    renderer.setSize(width, height);
 
-      switch (direction) {
-        case 'UP':
-          snakeHead.y -= 1;
-          break;
-        case 'DOWN':
-          snakeHead.y += 1;
-          break;
-        case 'LEFT':
-          snakeHead.x -= 1;
-          break;
-        case 'RIGHT':
-          snakeHead.x += 1;
-          break;
-        default:
-          break;
-      }
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(75, width / height, 0.1, 1000);
+    camera.position.z = 5;
+    cameraRef.current = camera;
 
-      if (
-        snakeHead.x >= BOARD_SIZE ||
-        snakeHead.y >= BOARD_SIZE ||
-        snakeHead.x < 0 ||
-        snakeHead.y < 0 ||
-        snake.some(segment => segment.x === snakeHead.x && segment.y === snakeHead.y)
-      ) {
-        setGameOver(true);
-        Alert.alert('Game Over', 'You crashed!');
-        return;
-      }
+    const geometry = new BoxGeometry(1, 1, 1);
+    const material = new MeshBasicMaterial({ color: 0x00ff00 });
+    cube = new Mesh(geometry, material);
+    scene.add(cube);
 
-      const newSnake = [snakeHead, ...snake];
+    function animate() {
+      requestAnimationFrame(animate);
 
-      if (snakeHead.x === food.x && snakeHead.y === food.y) {
-        setFood(getRandomPosition());
-      } else {
-        newSnake.pop();
-      }
+      cube.rotation.x += 0.01;
+      cube.rotation.y += 0.01;
 
-      setSnake(newSnake);
-    };
+      renderer.render(scene, camera);
+      gl.endFrameEXP();
+    }
+    animate();
+  };
 
-    const intervalId = setInterval(moveSnake, 300);
-    return () => clearInterval(intervalId);
-  }, [snake, direction, gameOver]);
+  const moveForward = () => {
+    const camera = cameraRef.current;
+    camera.position.z -= 0.1;
+  };
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      switch (e.key) {
-        case 'ArrowUp':
-          setDirection('UP');
-          break;
-        case 'ArrowDown':
-          setDirection('DOWN');
-          break;
-        case 'ArrowLeft':
-          setDirection('LEFT');
-          break;
-        case 'ArrowRight':
-          setDirection('RIGHT');
-          break;
-        default:
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const restartGame = () => {
-    setSnake(INITIAL_SNAKE);
-    setFood(getRandomPosition());
-    setDirection('RIGHT');
-    setGameOver(false);
+  const moveBackward = () => {
+    const camera = cameraRef.current;
+    camera.position.z += 0.1;
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.board}>
-        <Snake snake={snake} />
-        <Food position={food} />
+      <GLView style={styles.glView} onContextCreate={onContextCreate} />
+      <View style={styles.controls}>
+        <TouchableOpacity style={styles.button} onPress={moveForward}>
+          <Button title="Forward" onPress={moveForward} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={moveBackward}>
+          <Button title="Backward" onPress={moveBackward} />
+        </TouchableOpacity>
       </View>
-      <Button title="Restart Game" onPress={restartGame} />
     </SafeAreaView>
   );
 }
@@ -133,22 +70,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 30,
   },
-  board: {
-    width: BOARD_SIZE * 20,
-    height: BOARD_SIZE * 20,
-    borderWidth: 2,
-    borderColor: '#000',
+  glView: {
+    width: '100%',
+    height: '100%',
   },
-  snake: {
+  controls: {
     position: 'absolute',
-    width: 20,
-    height: 20,
-    backgroundColor: 'green',
+    bottom: 50,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '50%',
   },
-  food: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    backgroundColor: 'red',
+  button: {
+    margin: 10,
   },
 });
